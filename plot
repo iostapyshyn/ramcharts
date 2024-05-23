@@ -1,23 +1,15 @@
 #!/usr/bin/env python3
 
-import numpy as np
-from numba import jit, typed
+import argparse
+from math import ceil
+import os
 
-import sys
+import numpy as np
+from numba import jit
 
 from PIL import Image
 
-from math import ceil, sqrt
-
 from common import Page
-
-infile = sys.argv[1]
-
-data = np.fromfile(sys.argv[1], dtype=np.uint32)
-
-height = 512 * 4 # ceil(sqrt(total))
-
-print(ceil(len(data)/height))
 
 @jit(nopython=True)
 def colorize(data, height):
@@ -25,7 +17,7 @@ def colorize(data, height):
     imdata = np.zeros((height,ceil(total/height),3), dtype=np.uint8)
 
     for (i, v) in enumerate(data):
-        color = [255, 0,   0]
+        color = [255, 0, 0]
         if v == Page.FREE:
             color = [0, 0, 0]
         elif v == Page.RESERVED:
@@ -39,5 +31,22 @@ def colorize(data, height):
 
     return imdata
 
-im = Image.fromarray(colorize(data, height), mode="RGB")
-im.save(infile+'.png')
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("input", nargs='+')
+    parser.add_argument("-f", "--format", type=str, default="png")
+    parser.add_argument("-H", "--height", type=int, default=512)
+
+    args = parser.parse_args()
+
+    height = args.height
+
+    for infile in args.input:
+        outfile = os.path.splitext(infile)[0] + f".{args.format}"
+
+        data = np.load(infile)['pages']
+
+        print(f'Writing {outfile} with {ceil(len(data)/height)}x{height}')
+
+        im = Image.fromarray(colorize(data, height), mode="RGB")
+        im.save(outfile)

@@ -1,4 +1,5 @@
 from enum import IntEnum
+import numpy as np
 
 class Page(IntEnum):
     FREE     = 0

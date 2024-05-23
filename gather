@@ -5,45 +5,60 @@ from drgn import FaultError, NULL, Object, cast, container_of, execscript, offse
 from drgn.helpers.common import *
 from drgn.helpers.linux import *
 
+import argparse
 import numpy as np
 
-from common import Page
+from tqdm import tqdm
+
+from common import *
 
 import sys
 
-outfile = sys.argv[1]
+def interpret_page(page):
+    ret = int(Page.FREE)
 
-total = int(prog["max_pfn"] - prog["min_low_pfn"])
+    try:
+        if PageCompound(page) and PageTail(page):
+            page = compound_head(page)
 
-data = np.zeros(total, dtype=np.uint32)
+        if page._refcount.counter > 0:
+            ret = int(Page.OTHER)
 
-try:
-    for (i, page) in enumerate(for_each_page(prog)):
-        print(f'{i}/{total}', end='\r')
-        if i == 0:
-            print(page)
-        try:
-            if PageCompound(page) and PageTail(page):
-                page = compound_head(page)
+            if PageReserved(page):
+                ret = int(Page.RESERVED)
 
-            if page._refcount.counter > 0:
-                data[i] = int(Page.OTHER)
+            mapping_addr = page.mapping[0].address_
+            if mapping_addr != 0:
+                if mapping_addr & 1:
+                    ret = int(Page.ANON)
+                else:
+                    ret = int(Page.FILE)
+    except FaultError:
+        pass
 
-                if PageReserved(page):
-                    data[i] = int(Page.RESERVED)
+    return ret
 
-                mapping_addr = page.mapping[0].address_
-                if mapping_addr != 0:
-                    if mapping_addr & 1:
-                        data[i] = int(Page.ANON)
-                    else:
-                        data[i] = int(Page.FILE)
-        except FaultError:
-            pass
-except KeyboardInterrupt:
-    pass
 
-data.tofile(outfile)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("outfile")
+    args = parser.parse_args()
+
+    f = open(args.outfile, "wb")
+
+    total = int(prog["max_pfn"] - prog["min_low_pfn"])
+
+    data = np.zeros(total, dtype=np.uint8)
+
+    try:
+        for (i, page) in tqdm(enumerate(for_each_page(prog)), total=total):
+            data[i] = interpret_page(page)
+
+    except KeyboardInterrupt:
+        pass
+
+    np.savez_compressed(f, pages=data)
 
 # Local Variables:
 # mode: python
