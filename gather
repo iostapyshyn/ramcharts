@@ -1,0 +1,50 @@
+#!/usr/bin/env drgn
+
+import drgn
+from drgn import FaultError, NULL, Object, cast, container_of, execscript, offsetof, reinterpret, sizeof, stack_trace
+from drgn.helpers.common import *
+from drgn.helpers.linux import *
+
+import numpy as np
+
+from common import Page
+
+import sys
+
+outfile = sys.argv[1]
+
+total = int(prog["max_pfn"] - prog["min_low_pfn"])
+
+data = np.zeros(total, dtype=np.uint32)
+
+try:
+    for (i, page) in enumerate(for_each_page(prog)):
+        print(f'{i}/{total}', end='\r')
+        if i == 0:
+            print(page)
+        try:
+            if PageCompound(page) and PageTail(page):
+                page = compound_head(page)
+
+            if page._refcount.counter > 0:
+                data[i] = int(Page.OTHER)
+
+                if PageReserved(page):
+                    data[i] = int(Page.RESERVED)
+
+                mapping_addr = page.mapping[0].address_
+                if mapping_addr != 0:
+                    if mapping_addr & 1:
+                        data[i] = int(Page.ANON)
+                    else:
+                        data[i] = int(Page.FILE)
+        except FaultError:
+            pass
+except KeyboardInterrupt:
+    pass
+
+data.tofile(outfile)
+
+# Local Variables:
+# mode: python
+# End:
