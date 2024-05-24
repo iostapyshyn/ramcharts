@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+
+import argparse
+import time
+from qmp import QEMUMonitorProtocol
+import logging
+import os
+from tqdm import tqdm
+import sys
+
+import subprocess as sp
+
+MEMMAP_PATH = os.path.dirname(os.path.realpath(__file__))
+GATHER_PATH = os.path.join(MEMMAP_PATH, "gather")
+
+def sample(qmp, dump, syms, prefix):
+    try:
+        os.unlink(args.dump)
+    except FileNotFoundError:
+        pass
+
+    qmp.command("stop")
+    # Setting paging to True causes qemu to hang.  Without it, drgn cannot
+    # translate virt to phys addresses in the resulting image.  The workaround
+    # is to set DRGN_USE_LIBKDUMPFILE_FOR_ELF=1, which is deprecated.
+    qmp.command("dump-guest-memory", paging=False, protocol=f"file:{dump}")
+    qmp.command("cont")
+
+    path = f"{prefix}{sample.counter}.npz"
+    sample.counter += 1
+
+    os.environ["DRGN_USE_LIBKDUMPFILE_FOR_ELF"] = "1"
+
+    cmd = ["drgn", "-s", syms, "-c", dump, GATHER_PATH, "--", path]
+    print(" -> " + " ".join(cmd))
+    sp.run(cmd, stdout=sys.stdout, stderr=sys.stderr, check=True)
+
+sample.counter = 0
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("prefix", nargs='?', default="")
+
+    parser.add_argument("-s", "--symbols", required=True, type=str)
+    parser.add_argument("-d", "--dump", required=True, type=str)
+
+    parser.add_argument("-t", "--period", type=int, default=5*60)
+    parser.add_argument("-n", "--runs", type=int)
+    
+    parser.add_argument("--qmp-host", type=str, default="localhost")
+    parser.add_argument("--qmp-port", type=int, default=4444)
+
+    args = parser.parse_args()
+
+    qmp = QEMUMonitorProtocol((args.qmp_host, args.qmp_port))
+    qmp.connect()
+    logging.basicConfig(level=logging.DEBUG)
+
+    while True:
+        sample(qmp, args.dump, args.symbols, args.prefix)
+
+        if args.runs is not None:
+            args.runs -= 1
+            if args.runs == 0:
+                break
+
+        rem = args.period
+        while rem != 0:
+            print(f"Waiting {rem}s    ", end="\r")
+            time.sleep(1)
+            rem -= 1
