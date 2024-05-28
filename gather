@@ -17,24 +17,21 @@ import sys
 def interpret_page(page):
     ret = int(Page.FREE)
 
-    try:
-        if PageCompound(page) and PageTail(page):
-            page = compound_head(page)
+    if PageCompound(page) and PageTail(page):
+        page = compound_head(page)
 
-        if page._refcount.counter > 0:
-            ret = int(Page.OTHER)
+    if page._refcount.counter > 0:
+        ret = int(Page.OTHER)
 
-            if PageReserved(page):
-                ret = int(Page.RESERVED)
+        if PageReserved(page):
+            ret = int(Page.RESERVED)
 
-            mapping_addr = page.mapping[0].address_
-            if mapping_addr != 0:
-                if mapping_addr & 1:
-                    ret = int(Page.ANON)
-                else:
-                    ret = int(Page.FILE)
-    except FaultError:
-        pass
+        mapping_addr = page.mapping[0].address_
+        if mapping_addr != 0:
+            if mapping_addr & 1:
+                ret = int(Page.ANON)
+            else:
+                ret = int(Page.FILE)
 
     return ret
 
@@ -50,15 +47,20 @@ if __name__ == '__main__':
     total = int(prog["max_pfn"] - prog["min_low_pfn"])
 
     data = np.zeros(total, dtype=np.uint8)
+    mapcounts = np.zeros(total, dtype=np.int32)
 
     try:
         for (i, page) in tqdm(enumerate(for_each_page(prog)), total=total):
-            data[i] = interpret_page(page)
+            try:
+                data[i] = interpret_page(page)
+                mapcounts[i] = page._mapcount.counter
+            except FaultError:
+                pass
 
     except KeyboardInterrupt:
         pass
 
-    np.savez_compressed(f, pages=data)
+    np.savez_compressed(f, pages=data, mapcounts=mapcounts)
 
 # Local Variables:
 # mode: python

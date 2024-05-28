@@ -12,7 +12,7 @@ from PIL import Image
 from common import Page
 
 @jit(nopython=True)
-def colorize(data, height):
+def colorize(data, height, mapcounts=None):
     total = len(data)
     imdata = np.zeros((height,ceil(total/height),3), dtype=np.uint8)
 
@@ -23,9 +23,12 @@ def colorize(data, height):
         elif v == Page.RESERVED:
             color = [0, 255, 0]
         elif v == Page.ANON:
-            color = [0, 255, 255]
+                color = [0, 255, 255]
         elif v == Page.FILE:
-            color = [0, 0, 255]
+            if mapcounts is not None and mapcounts[i] == -1:
+                color = [0, 0, 100]
+            else:
+                color = [0, 0, 255]
 
         imdata[i%height][i//height] = color
 
@@ -44,9 +47,11 @@ if __name__ == '__main__':
     for infile in args.input:
         outfile = os.path.splitext(infile)[0] + f".{args.format}"
 
-        data = np.load(infile)['pages']
+        npz = np.load(infile)
+
+        data = npz['pages']
 
         print(f'Writing {outfile} with {ceil(len(data)/height)}x{height}')
 
-        im = Image.fromarray(colorize(data, height), mode="RGB")
+        im = Image.fromarray(colorize(data, height, mapcounts=npz.get("mapcounts", None)), mode="RGB")
         im.save(outfile)

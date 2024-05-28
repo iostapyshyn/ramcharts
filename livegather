@@ -26,6 +26,8 @@ def sample(qmp, dump, syms, prefix):
     qmp.command("dump-guest-memory", paging=False, protocol=f"file:{dump}")
     qmp.command("cont")
 
+    sample.last_time = int(time.time())
+
     path = f"{prefix}{sample.counter}.npz"
     sample.counter += 1
 
@@ -36,6 +38,7 @@ def sample(qmp, dump, syms, prefix):
     sp.run(cmd, stdout=sys.stdout, stderr=sys.stderr, check=True)
 
 sample.counter = 0
+sample.last_time = 0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -64,8 +67,10 @@ if __name__ == "__main__":
             if args.runs == 0:
                 break
 
-        rem = args.period
-        while rem != 0:
+        now = int(time.time())
+        while now < sample.last_time + args.period:
+            rem = sample.last_time + args.period - now
             print(f"Waiting {rem}s    ", end="\r")
+
             time.sleep(1)
-            rem -= 1
+            now = int(time.time())
