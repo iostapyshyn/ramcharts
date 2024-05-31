@@ -49,11 +49,14 @@ if __name__ == "__main__":
 
     parser.add_argument("-t", "--period", type=int, default=5*60)
     parser.add_argument("-n", "--runs", type=int)
+    parser.add_argument("--start", type=int, default=0)
     
     parser.add_argument("--qmp-host", type=str, default="localhost")
     parser.add_argument("--qmp-port", type=int, default=4444)
 
     args = parser.parse_args()
+
+    sample.counter = args.start
 
     qmp = QEMUMonitorProtocol((args.qmp_host, args.qmp_port))
     qmp.connect()

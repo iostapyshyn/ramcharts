@@ -14,26 +14,74 @@ from common import *
 
 import sys
 
-def interpret_page(page):
-    ret = int(Page.FREE)
+zones_pgshift = None
+zones_mask = None
 
-    if PageCompound(page) and PageTail(page):
+def page_zonenum(page):
+    return (page.flags.value_() >> zones_pgshift) & zones_mask
+
+def parse_vmcoreinfo(prog):
+    return dict(
+        line.split("=", 1)
+        for line in prog["VMCOREINFO"].string_().decode().strip().split("\n")
+    )
+
+def interpret_page(pfn, page):
+    # flags stored in the LSBs of the mapping field
+    MAPPING_FLAG_ANON    = 0x01
+    MAPPING_FLAG_MOVABLE = 0x02
+
+    # mapcount less then this value means page_type is stored in its MSB
+    PAGE_MAPCOUNT_RESERVE = -128
+
+    pagetype = Page.FREE
+    pageflags = 0
+    mapcount = 0
+
+    orig_page = page
+
+    if PageCompound(page):
+        pageflags |= PageFlags.COMPOUND
+        if PageHead(page):
+            pageflags |= PageFlags.HEAD
+
+        orig_page = page
         page = compound_head(page)
 
+    zonenum = page_zonenum(page)
+
     if page._refcount.counter > 0:
-        ret = int(Page.OTHER)
+        pagetype = Page.OTHER
 
         if PageReserved(page):
-            ret = int(Page.RESERVED)
+            pagetype = Page.RESERVED
+        elif PageSlab(page):
+            pagetype = Page.SLAB
+        elif PageSwapBacked(page) and PageOwnerPriv1(page):
+            pagetype = Page.SWAPCACHE
+        else:
+            mapcount = int(orig_page._mapcount.counter) + 1
 
-        mapping_addr = page.mapping[0].address_
-        if mapping_addr != 0:
-            if mapping_addr & 1:
-                ret = int(Page.ANON)
-            else:
-                ret = int(Page.FILE)
+            if pageflags & PageFlags.COMPOUND:
+                # Total mapcount from tail
+                mapcount += int((page+1).compound_mapcount.counter) + 1
+            elif mapcount-1 < PAGE_MAPCOUNT_RESERVE:
+                # Not userspace, but buddy, offline, table, guard, (hugetlb)
+                return pagetype, pageflags, mapcount, zonenum
 
-    return ret
+            mapping_addr = page.mapping[0].address_
+            if mapping_addr != 0:
+                pagetype = Page.USER
+
+                if mapping_addr & MAPPING_FLAG_ANON:
+                    pageflags |= PageFlags.ANON
+                    if PageMappedToDisk(page): # anon exclusive
+                        pageflags |= PageFlags.ANON_EXCL
+
+                if mapping_addr & MAPPING_FLAG_MOVABLE:
+                    pageflags |= PageFlags.MOVABLE
+
+    return pagetype, pageflags, mapcount, zonenum
 
 
 
@@ -46,21 +94,30 @@ if __name__ == '__main__':
 
     total = int(prog["max_pfn"] - prog["min_low_pfn"])
 
-    data = np.zeros(total, dtype=np.uint8)
-    mapcounts = np.zeros(total, dtype=np.int32)
+    out_types = np.zeros(total, dtype=np.uint8)
+    out_flags = np.zeros(total, dtype=np.uint32)
+    out_counts = np.zeros(total, dtype=np.int32)
+    out_zones = np.zeros(total, dtype=np.uint16)
+
+    vmcoreinfo = parse_vmcoreinfo(prog)
+    zones_pgshift = int(vmcoreinfo.get("NUMBER(ZONES_PGSHIFT)", 55))
+    zones_mask = int(vmcoreinfo.get("NUMBER(ZONES_MASK)", 7))
 
     try:
-        for (i, page) in tqdm(enumerate(for_each_page(prog)), total=total):
+        for (pfn, page) in tqdm(enumerate(for_each_page(prog)), total=total):
             try:
-                data[i] = interpret_page(page)
-                mapcounts[i] = page._mapcount.counter
+                pagetype, pageflags, mapcount, zonenum = interpret_page(pfn, page)
+                out_types[pfn] = pagetype
+                out_flags[pfn] = pageflags
+                out_counts[pfn] = mapcount
+                out_zones[pfn] = zonenum
             except FaultError:
                 pass
 
     except KeyboardInterrupt:
         pass
 
-    np.savez_compressed(f, pages=data, mapcounts=mapcounts)
+    np.savez_compressed(f, types=out_types, flags=out_flags, mapcounts=out_counts)
 
 # Local Variables:
 # mode: python
