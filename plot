@@ -15,6 +15,7 @@ ANON_FLAG = uint32(PageFlags.ANON)
 ANON_EXCL_FLAG = uint32(PageFlags.ANON_EXCL)
 MOVABLE_FLAG = uint32(PageFlags.MOVABLE)
 HEAD_FLAG = uint32(PageFlags.HEAD)
+DIRTY_FLAG = uint32(PageFlags.DIRTY)
 
 @njit
 def colorize(types, flags, counts, height, highlight_head=False):
@@ -25,6 +26,8 @@ def colorize(types, flags, counts, height, highlight_head=False):
         color = [0, 0, 0]
         if types[i] == Page.FREE:
             pass
+        if types[i] == Page.FAULT:
+            color = [100,100,100]
         elif highlight_head and flags[i] & HEAD_FLAG:
             color = [255, 255, 255]
         elif types[i] == Page.RESERVED:

@@ -27,6 +27,12 @@ def parse_vmcoreinfo(prog):
     )
 
 def interpret_page(pfn, page):
+    try:
+        return interpret_existing_page(pfn, page)
+    except FaultError:
+        return Page.FAULT, 0, 0, 0
+
+def interpret_existing_page(pfn, page):
     # flags stored in the LSBs of the mapping field
     MAPPING_FLAG_ANON    = 0x01
     MAPPING_FLAG_MOVABLE = 0x02
@@ -69,6 +75,9 @@ def interpret_page(pfn, page):
                 # Not userspace, but buddy, offline, table, guard, (hugetlb)
                 return pagetype, pageflags, mapcount, zonenum
 
+            if PageDirty(page):
+                pageflags |= PageFlags.DIRTY
+
             mapping_addr = page.mapping[0].address_
             if mapping_addr != 0:
                 pagetype = Page.USER
@@ -82,7 +91,6 @@ def interpret_page(pfn, page):
                     pageflags |= PageFlags.MOVABLE
 
     return pagetype, pageflags, mapcount, zonenum
-
 
 
 if __name__ == '__main__':
@@ -105,14 +113,11 @@ if __name__ == '__main__':
 
     try:
         for (pfn, page) in tqdm(enumerate(for_each_page(prog)), total=total):
-            try:
-                pagetype, pageflags, mapcount, zonenum = interpret_page(pfn, page)
-                out_types[pfn] = pagetype
-                out_flags[pfn] = pageflags
-                out_counts[pfn] = mapcount
-                out_zones[pfn] = zonenum
-            except FaultError:
-                pass
+            pagetype, pageflags, mapcount, zonenum = interpret_page(pfn, page)
+            out_types[pfn] = pagetype
+            out_flags[pfn] = pageflags
+            out_counts[pfn] = mapcount
+            out_zones[pfn] = zonenum
 
     except KeyboardInterrupt:
         pass
