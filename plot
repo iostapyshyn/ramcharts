@@ -31,20 +31,16 @@ def colorize(types, flags, counts, height, highlight_head=False):
         elif highlight_head and flags[i] & HEAD_FLAG:
             color = [255, 255, 255]
         elif types[i] == Page.RESERVED:
-            color = [0, 255, 0]
+            color = [255, 0, 0]
         elif types[i] == Page.SLAB:
             color = [255, 0, 0]
         elif types[i] == Page.OTHER:
-            color = [255, 0, 255]
+            color = [255, 0, 0]
         elif types[i] == Page.USER or types[i] == Page.SWAPCACHE:
             if not (flags[i] & ANON_FLAG) or types[i] == Page.SWAPCACHE:
-                color = [0, 0, 255]
+                color = [0, 128, 255] if counts[i] > 0 else [0, 0, 255]
             else:
-                color = [0, 255, 255]
-
-            if counts[i] <= 0: # and not (flags[i] & ANON_EXCL_FLAG)
-                for j in range(len(color)):
-                    color[j] = int(color[j]*0.5)
+                color = [0, 255, 255] if counts[i] > 0 else [0, 200, 200]
 
         imdata[i%height][i//height] = color
 
@@ -66,11 +62,21 @@ if __name__ == '__main__':
         outfile = args.prefix + os.path.splitext(infile)[0] + f".{args.format}"
 
         npz = np.load(infile)
-        total = len(npz["types"])
+
+        types = npz["types"]
+        flags = npz["flags"]
+        counts = npz["mapcounts"]
+
+        empty_range = range(1536*512, 2048*512)
+        types = np.delete(types, empty_range)
+        flags = np.delete(flags, empty_range)
+        counts = np.delete(counts, empty_range)
+
+        total = len(types)
 
         print(f'Writing {outfile} with {ceil(total/height)}x{height}')
 
         col_func = colorize
 
-        im = Image.fromarray(col_func(npz["types"], npz["flags"], npz["mapcounts"], height, highlight_head=args.head), mode="RGB")
+        im = Image.fromarray(col_func(types, flags, counts, height, highlight_head=args.head), mode="RGB")
         im.save(outfile)
