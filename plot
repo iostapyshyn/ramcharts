@@ -67,10 +67,10 @@ if __name__ == '__main__':
         flags = npz["flags"]
         counts = npz["mapcounts"]
 
-        empty_range = range(1536*512, 2048*512)
-        types = np.delete(types, empty_range)
-        flags = np.delete(flags, empty_range)
-        counts = np.delete(counts, empty_range)
+        # empty_range = range(1536*512, 2048*512)
+        # types = np.delete(types, empty_range)
+        # flags = np.delete(flags, empty_range)
+        # counts = np.delete(counts, empty_range)
 
         total = len(types)
 
