@@ -1,0 +1,6 @@
+drgn
+numpy
+pillow
+tqdm
+numba
+qmp
