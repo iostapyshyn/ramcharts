@@ -31,7 +31,7 @@ def colorize(types, flags, counts, height, highlight_head=False):
         elif highlight_head and flags[i] & HEAD_FLAG:
             color = [255, 255, 255]
         elif types[i] == Page.RESERVED:
-            color = [255, 0, 0]
+            color = [0, 255, 0]
         elif types[i] == Page.SLAB:
             color = [255, 0, 0]
         elif types[i] == Page.OTHER:
